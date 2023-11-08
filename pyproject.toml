@@ -9,7 +9,7 @@ readme = "README.md"
 python = ">=3.8.1,<4.0"
 psycopg = "^3.1.12"
 psycopg-pool = "^3.1.8"
-qaspen = "0.0.5a"
+qaspen = "^0.0.5a0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.6.1"
