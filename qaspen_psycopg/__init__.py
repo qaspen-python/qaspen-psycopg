@@ -1,1 +1,1 @@
-"""Qaspen engine package for psycopg support."""
+"""Qaspen engine for psycopg support."""
