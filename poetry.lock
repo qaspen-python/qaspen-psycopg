@@ -922,14 +922,14 @@ files = [
 
 [[package]]
 name = "qaspen"
-version = "0.0.1a0"
+version = "0.0.2a0"
 description = ""
 category = "main"
 optional = false
 python-versions = ">=3.8.1,<4.0"
 files = [
-    {file = "qaspen-0.0.1a0-py3-none-any.whl", hash = "sha256:33f43b705e163ca57766bf5360ab70162a99a0dfa8f5a87945f408f97262e86c"},
-    {file = "qaspen-0.0.1a0.tar.gz", hash = "sha256:d3866ba5599496c996ba6ea084f29410797565f519f84bda40b73515c8e6a7eb"},
+    {file = "qaspen-0.0.2a0-py3-none-any.whl", hash = "sha256:c95f83b3d233ac30df1ed743edbc2c45e5968325631d4566d2e9c43f6a19c0c7"},
+    {file = "qaspen-0.0.2a0.tar.gz", hash = "sha256:4e887d760411a89e1237acadae9bd7b952b9aa26aee530417b5b495b04e5d666"},
 ]
 
 [package.dependencies]
@@ -1105,4 +1105,4 @@ tokenize-rt = ">=2.1"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8.1,<4.0"
-content-hash = "1731464a9514d7277ab0b501e4cf0ef2c0c9b24ab3fae903870cce1b18eafb6d"
+content-hash = "6eacac3344254829066e95fd87462ab08dd9ea26ad8960263a2d17d1e405a0ea"

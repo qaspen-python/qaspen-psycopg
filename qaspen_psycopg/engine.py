@@ -3,18 +3,11 @@ from __future__ import annotations
 import contextvars
 import types
 import warnings
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-)
+from typing import TYPE_CHECKING, Any, Dict, Final
 
-from psycopg import AsyncConnection
+from psycopg import AsyncConnection, AsyncCursor
+from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
-
 from qaspen.abc.db_engine import BaseEngine
 from qaspen.abc.db_transaction import BaseTransaction
 from qaspen.querystring.querystring import QueryString
@@ -90,10 +83,7 @@ class PsycopgTransaction(
 
         Then return connection to the connection pool.
         """
-        rollback_condition = (
-           exception
-           and not self._is_rollback_executed 
-        )
+        rollback_condition = exception and not self._is_rollback_executed
         commit_condition = (
             not exception
             and not self._is_commit_executed
@@ -126,7 +116,7 @@ class PsycopgTransaction(
         """
         await self.connection.rollback()
         self._is_rollback_executed = True
-    
+
     async def commit(self: Self) -> None:
         """Commit the transaction.
 
@@ -134,7 +124,7 @@ class PsycopgTransaction(
         """
         await self.connection.commit()
         self._is_commit_executed = True
-    
+
     async def begin(self: Self) -> None:
         return None
 
@@ -144,7 +134,6 @@ class PsycopgEngine(
         AsyncConnection[Any],
         AsyncConnectionPool,
         PsycopgTransaction,
-        Optional[List[Tuple[Any, ...]]],
     ],
 ):
     """Engine for PostgreSQL based on `psycopg`."""
@@ -173,20 +162,20 @@ class PsycopgEngine(
 
     @property
     async def connection_pool(
-        self: Self
+        self: Self,
     ) -> AsyncConnectionPool:
         """Property for connection pool."""
         if not self._connection_pool:
             return await self.create_connection_pool()
         return self._connection_pool
-    
+
     async def execute(
         self: Self,
         querystring: QueryString,
         in_pool: bool = True,
         fetch_results: bool | None = None,
         **_kwargs: Any,
-    ) -> List[Tuple[Any, ...]] | None:
+    ) -> list[dict[str, Any]] | None:
         """Execute a querystring.
 
         Run querystring and return raw result as in
@@ -204,33 +193,45 @@ class PsycopgEngine(
         ### Returns:
         Raw result from database driver.
         """
-        results: List[Tuple[Any, ...]] | None = None
+        results: list[dict[str, Any]] | None = None
         if running_transaction := self.running_transaction.get():
-            cursor = await running_transaction.connection.execute(
+            cursor = self._retrieve_cursor(
+                running_transaction.connection,
+            )
+            cursor = await cursor.execute(
                 query=str(querystring),
             )
             if fetch_results:
                 results = await cursor.fetchall()
-        
+
         elif in_pool:
-            conn_pool = await self.connection_pool
+            conn_pool: Final = await self.connection_pool
             connection = await conn_pool.getconn()
-            cursor = await connection.execute(
+            cursor = cursor = self._retrieve_cursor(
+                connection=connection,
+            )
+            cursor = await cursor.execute(
                 str(querystring),
             )
             if fetch_results:
                 results = await cursor.fetchall()
-            
+
+            await connection.commit()
             await conn_pool.putconn(connection)
-        
+
         else:
-            new_conn = await self.connection()
-            cursor = await new_conn.execute(
+            connection = await self.connection()
+            cursor = self._retrieve_cursor(
+                connection,
+            )
+            cursor = await cursor.execute(
                 str(querystring),
             )
             if fetch_results:
                 results = await cursor.fetchall()
-        
+
+            await connection.commit()
+
         return results
 
     async def prepare_database(self: Self) -> None:
@@ -279,7 +280,7 @@ class PsycopgEngine(
 
     async def connection(self: Self) -> AsyncConnection[Any]:
         """Create new connection outside connection pool.
-        
+
         ### Returns:
         initialized `AsyncConnection`.
         """
@@ -294,3 +295,14 @@ class PsycopgEngine(
         New `PsycopgTransaction`.
         """
         return PsycopgTransaction(engine=self)
+
+    def _retrieve_cursor(self: Self, connection: AsyncConnection) -> AsyncCursor:
+        """Create cursor for the connection:
+
+        ### Parameters:
+        - `connection`: connection to the database.
+
+        ### Returns:
+        New `AsyncCursor`
+        """
+        return connection.cursor(row_factory=dict_row)
