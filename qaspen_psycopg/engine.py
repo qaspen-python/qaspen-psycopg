@@ -64,8 +64,8 @@ class PsycopgTransaction(
         ### Returns:
         New transaction context manager.
         """
-        self.connection = await self.retrieve_connection()
-        self.transaction = self.connection.cursor()
+        self._connection = await self.retrieve_connection()
+        self._transaction = self._connection.cursor()
         self.context = self.engine.running_transaction.set(self)
         return self
 
@@ -95,7 +95,7 @@ class PsycopgTransaction(
             await self.commit()
 
         conn_pool = await self.engine.connection_pool
-        await conn_pool.putconn(self.connection)
+        await conn_pool.putconn(self._connection)
 
         self.engine.running_transaction.reset(self.context)
 
@@ -106,15 +106,15 @@ class PsycopgTransaction(
         `AsyncConnection`.
         """
         connection_pool = await self.engine.connection_pool
-        self.connection = await connection_pool.getconn()
-        return self.connection
+        self._connection = await connection_pool.getconn()
+        return self._connection
 
     async def rollback(self: Self) -> None:
         """Rollback the transaction.
 
         And set `_is_rollback_executed` flag to True.
         """
-        await self.connection.rollback()
+        await self._connection.rollback()
         self._is_rollback_executed = True
 
     async def commit(self: Self) -> None:
@@ -122,7 +122,7 @@ class PsycopgTransaction(
 
         And set `_is_commit_executed` flag to True.
         """
-        await self.connection.commit()
+        await self._connection.commit()
         self._is_commit_executed = True
 
     async def begin(self: Self) -> None:
@@ -215,10 +215,8 @@ class PsycopgEngine(
         """
         results: list[dict[str, Any]] | None = None
         if running_transaction := self.running_transaction.get():
-            cursor = self._retrieve_cursor(
-                running_transaction.connection,
-            )
-            cursor = await cursor.execute(
+            transaction = running_transaction._transaction
+            cursor = await transaction.execute(
                 query=str(querystring),
             )
             if fetch_results:
