@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextvars
 import types
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, Final
+from typing import TYPE_CHECKING, Any, Dict, Final, Literal, overload
 
 from psycopg import AsyncConnection, AsyncCursor
 from psycopg.rows import dict_row
@@ -169,11 +169,31 @@ class PsycopgEngine(
             return await self.create_connection_pool()
         return self._connection_pool
 
+    @overload
+    async def execute(  # type: ignore[misc]
+        self: Self,
+        querystring: QueryString,
+        in_pool: bool = True,
+        fetch_results: Literal[True] = True,
+        **_kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        ...
+
+    @overload
     async def execute(
         self: Self,
         querystring: QueryString,
         in_pool: bool = True,
-        fetch_results: bool | None = None,
+        fetch_results: Literal[False] = False,
+        **_kwargs: Any,
+    ) -> None:
+        ...
+
+    async def execute(
+        self: Self,
+        querystring: QueryString,
+        in_pool: bool = True,
+        fetch_results: bool = True,
         **_kwargs: Any,
     ) -> list[dict[str, Any]] | None:
         """Execute a querystring.
