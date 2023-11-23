@@ -139,6 +139,8 @@ class PsycopgEngine(
 ):
     """Engine for PostgreSQL based on `psycopg`."""
 
+    engine_type: str = "PSQLPsycopg"
+
     def __init__(
         self: Self,
         connection_url: str,
