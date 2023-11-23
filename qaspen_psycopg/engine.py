@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextvars
 import types
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, Final, Literal, overload
+from typing import TYPE_CHECKING, Any, Final, Literal, overload
 
 from psycopg import AsyncConnection, AsyncCursor
 from psycopg.rows import dict_row
@@ -25,6 +25,7 @@ class PsycopgTransaction(
     """Transaction for `PsycopgEngine`.
 
     It allows us to use async context manager.
+
     Example:
     -------
     ```python
@@ -144,7 +145,7 @@ class PsycopgEngine(
         open_connection_pool_wait: bool | None = None,
         open_connection_pool_timeout: float | None = None,
         close_connection_pool_timeout: float | None = None,
-        connection_pool_params: Dict[str, Any] | None = None,
+        connection_pool_params: dict[str, Any] | None = None,
     ) -> None:
         self.connection_url = connection_url
         self.running_transaction: contextvars.ContextVar[
@@ -314,8 +315,11 @@ class PsycopgEngine(
         """
         return PsycopgTransaction(engine=self)
 
-    def _retrieve_cursor(self: Self, connection: AsyncConnection) -> AsyncCursor:
-        """Create cursor for the connection:
+    def _retrieve_cursor(
+        self: Self,
+        connection: AsyncConnection,
+    ) -> AsyncCursor:
+        """Create cursor for the connection.
 
         ### Parameters:
         - `connection`: connection to the database.
