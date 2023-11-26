@@ -10,7 +10,6 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 from qaspen.abc.db_engine import BaseEngine
 from qaspen.abc.db_transaction import BaseTransaction
-from qaspen.querystring.querystring import QueryString
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -54,6 +53,9 @@ class PsycopgTransaction(
         engine: PsycopgEngine,
     ) -> None:
         super().__init__(engine=engine)
+        self._connection: AsyncConnection[Any] | None = None
+        self._transaction: AsyncCursor[Any] | None = None
+
         self._is_rollback_executed: bool = False
         self._is_commit_executed: bool = False
 
@@ -66,7 +68,9 @@ class PsycopgTransaction(
         New transaction context manager.
         """
         self._connection = await self.retrieve_connection()
-        self._transaction = self._connection.cursor()
+        self._transaction = _retrieve_cursor(
+            connection=self._connection,
+        )
         self.context = self.engine.running_transaction.set(self)
         return self
 
@@ -100,6 +104,61 @@ class PsycopgTransaction(
 
         self.engine.running_transaction.reset(self.context)
 
+    @overload
+    async def execute(  # type: ignore[misc]
+        self: Self,
+        querystring: str,
+        fetch_results: Literal[True] = True,
+    ) -> list[dict[str, Any]]:
+        ...
+
+    @overload
+    async def execute(
+        self: Self,
+        querystring: str,
+        fetch_results: Literal[False] = False,
+    ) -> None:
+        ...
+
+    @overload
+    async def execute(
+        self: Self,
+        querystring: str,
+        fetch_results: bool,
+    ) -> list[dict[str, Any]] | None:
+        ...
+
+    async def execute(
+        self: Self,
+        querystring: str,
+        fetch_results: bool = True,
+    ) -> list[dict[str, Any]] | None:
+        """Execute querystring.
+
+        ### Parameters:
+        - `querystring`: sql querystring to execute.
+        - `fetch_results`: Get results or not,
+            Possible only for queries that return something.
+        """
+        results: list[dict[str, Any]] | None = None
+
+        if not self._connection:
+            self._connection = await self.retrieve_connection()
+            self._transaction = _retrieve_cursor(
+                connection=self._connection,
+            )
+
+        result_cursor: Final = (
+            await self._transaction.execute(  # type: ignore[union-attr]
+                query=querystring,
+            )
+        )
+
+        if fetch_results:
+            results = await result_cursor.fetchall()
+
+        return results
+
     async def retrieve_connection(self: Self) -> AsyncConnection[Any]:
         """Retrieve new connection from the engine.
 
@@ -107,15 +166,14 @@ class PsycopgTransaction(
         `AsyncConnection`.
         """
         connection_pool = await self.engine.connection_pool
-        self._connection = await connection_pool.getconn()
-        return self._connection
+        return await connection_pool.getconn()
 
     async def rollback(self: Self) -> None:
         """Rollback the transaction.
 
         And set `_is_rollback_executed` flag to True.
         """
-        await self._connection.rollback()
+        await self._connection.rollback()  # type: ignore[union-attr]
         self._is_rollback_executed = True
 
     async def commit(self: Self) -> None:
@@ -123,7 +181,7 @@ class PsycopgTransaction(
 
         And set `_is_commit_executed` flag to True.
         """
-        await self._connection.commit()
+        await self._connection.commit()  # type: ignore[union-attr]
         self._is_commit_executed = True
 
     async def begin(self: Self) -> None:
@@ -175,7 +233,7 @@ class PsycopgEngine(
     @overload
     async def execute(  # type: ignore[misc]
         self: Self,
-        querystring: QueryString,
+        querystring: str,
         in_pool: bool = True,
         fetch_results: Literal[True] = True,
         **_kwargs: Any,
@@ -185,16 +243,26 @@ class PsycopgEngine(
     @overload
     async def execute(
         self: Self,
-        querystring: QueryString,
+        querystring: str,
         in_pool: bool = True,
         fetch_results: Literal[False] = False,
         **_kwargs: Any,
     ) -> None:
         ...
 
+    @overload
     async def execute(
         self: Self,
-        querystring: QueryString,
+        querystring: str,
+        in_pool: bool = True,
+        fetch_results: bool = True,
+        **_kwargs: Any,
+    ) -> list[dict[str, Any]] | None:
+        ...
+
+    async def execute(
+        self: Self,
+        querystring: str,
         in_pool: bool = True,
         fetch_results: bool = True,
         **_kwargs: Any,
@@ -218,21 +286,19 @@ class PsycopgEngine(
         """
         results: list[dict[str, Any]] | None = None
         if running_transaction := self.running_transaction.get():
-            transaction = running_transaction._transaction
-            cursor = await transaction.execute(
-                query=str(querystring),
+            results = await running_transaction.execute(
+                querystring=querystring,
+                fetch_results=fetch_results,
             )
-            if fetch_results:
-                results = await cursor.fetchall()
 
         elif in_pool:
             conn_pool: Final = await self.connection_pool
             connection = await conn_pool.getconn()
-            cursor = cursor = self._retrieve_cursor(
+            cursor = _retrieve_cursor(
                 connection=connection,
             )
             cursor = await cursor.execute(
-                str(querystring),
+                querystring,
             )
             if fetch_results:
                 results = await cursor.fetchall()
@@ -242,11 +308,11 @@ class PsycopgEngine(
 
         else:
             connection = await self.connection()
-            cursor = self._retrieve_cursor(
+            cursor = _retrieve_cursor(
                 connection,
             )
             cursor = await cursor.execute(
-                str(querystring),
+                querystring,
             )
             if fetch_results:
                 results = await cursor.fetchall()
@@ -317,16 +383,16 @@ class PsycopgEngine(
         """
         return PsycopgTransaction(engine=self)
 
-    def _retrieve_cursor(
-        self: Self,
-        connection: AsyncConnection,
-    ) -> AsyncCursor:
-        """Create cursor for the connection.
 
-        ### Parameters:
-        - `connection`: connection to the database.
+def _retrieve_cursor(
+    connection: AsyncConnection,
+) -> AsyncCursor:
+    """Create cursor for the connection.
 
-        ### Returns:
-        New `AsyncCursor`
-        """
-        return connection.cursor(row_factory=dict_row)
+    ### Parameters:
+    - `connection`: connection to the database.
+
+    ### Returns:
+    New `AsyncCursor`
+    """
+    return connection.cursor(row_factory=dict_row)

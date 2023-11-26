@@ -51,7 +51,7 @@ jobs:
       - name: Install deps
         run: poetry install --all-extras
       - name: Run pytest check
-        run: poetry run pytest -vv -n auto --cov="qaspen" .
+        run: poetry run pytest -vv -n auto --cov="qaspen-psycopg" .
       - name: Generate report
         run: poetry run coverage xml
       - name: Upload coverage reports to Codecov with GitHub Action
