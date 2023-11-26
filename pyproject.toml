@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "qaspen-psycopg"
-version = "0.0.6a"
+version = "0.0.7a"
 description = ""
 authors = ["chandr-andr (Kiselev Aleksandr) <askiselev00@gmail.com>"]
 readme = "README.md"
