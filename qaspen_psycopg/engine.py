@@ -338,6 +338,7 @@ class PsycopgEngine(
         if not self._connection_pool:
             self._connection_pool = AsyncConnectionPool(
                 conninfo=self.connection_url,
+                open=False,
                 **self.connection_pool_params,
             )
             await self._connection_pool.open(
