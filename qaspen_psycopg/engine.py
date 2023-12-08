@@ -108,6 +108,7 @@ class PsycopgTransaction(
     async def execute(  # type: ignore[misc]
         self: Self,
         querystring: str,
+        querystring_parameters: list[Any],
         fetch_results: Literal[True] = True,
     ) -> list[dict[str, Any]]:
         ...
@@ -116,6 +117,7 @@ class PsycopgTransaction(
     async def execute(
         self: Self,
         querystring: str,
+        querystring_parameters: list[Any],
         fetch_results: Literal[False] = False,
     ) -> None:
         ...
@@ -124,6 +126,7 @@ class PsycopgTransaction(
     async def execute(
         self: Self,
         querystring: str,
+        querystring_parameters: list[Any],
         fetch_results: bool,
     ) -> list[dict[str, Any]] | None:
         ...
@@ -131,12 +134,15 @@ class PsycopgTransaction(
     async def execute(
         self: Self,
         querystring: str,
+        querystring_parameters: list[Any],
         fetch_results: bool = True,
     ) -> list[dict[str, Any]] | None:
         """Execute querystring.
 
         ### Parameters:
         - `querystring`: sql querystring to execute.
+        - `querystring_parameters`: parameters for querystring.
+            They will be processed on driver side.
         - `fetch_results`: Get results or not,
             Possible only for queries that return something.
         """
@@ -151,6 +157,7 @@ class PsycopgTransaction(
         result_cursor: Final = (
             await self._transaction.execute(  # type: ignore[union-attr]
                 query=querystring,
+                params=querystring_parameters,
             )
         )
 
@@ -234,6 +241,7 @@ class PsycopgEngine(
     async def execute(  # type: ignore[misc]
         self: Self,
         querystring: str,
+        querystring_parameters: list[Any],
         in_pool: bool = True,
         fetch_results: Literal[True] = True,
         **_kwargs: Any,
@@ -244,6 +252,7 @@ class PsycopgEngine(
     async def execute(
         self: Self,
         querystring: str,
+        querystring_parameters: list[Any],
         in_pool: bool = True,
         fetch_results: Literal[False] = False,
         **_kwargs: Any,
@@ -254,6 +263,7 @@ class PsycopgEngine(
     async def execute(
         self: Self,
         querystring: str,
+        querystring_parameters: list[Any],
         in_pool: bool = True,
         fetch_results: bool = True,
         **_kwargs: Any,
@@ -263,6 +273,7 @@ class PsycopgEngine(
     async def execute(
         self: Self,
         querystring: str,
+        querystring_parameters: list[Any],
         in_pool: bool = True,
         fetch_results: bool = True,
         **_kwargs: Any,
@@ -274,6 +285,8 @@ class PsycopgEngine(
 
         ### Parameters:
         - `querystring`: `QueryString` or it's subclasses.
+        - `querystring_parameters`: parameters for querystring.
+            They will be processed on driver side.
         - `in_pool`: execution in connection pool
             or in a new connection.
         - `fetch_results`: Get results or not,
@@ -288,6 +301,7 @@ class PsycopgEngine(
         if running_transaction := self.running_transaction.get():
             results = await running_transaction.execute(
                 querystring=querystring,
+                querystring_parameters=querystring_parameters,
                 fetch_results=fetch_results,
             )
 
@@ -298,7 +312,8 @@ class PsycopgEngine(
                 connection=connection,
             )
             cursor = await cursor.execute(
-                querystring,
+                query=querystring,
+                params=querystring_parameters,
             )
             if fetch_results:
                 results = await cursor.fetchall()
@@ -312,7 +327,8 @@ class PsycopgEngine(
                 connection,
             )
             cursor = await cursor.execute(
-                querystring,
+                query=querystring,
+                params=querystring_parameters,
             )
             if fetch_results:
                 results = await cursor.fetchall()
@@ -389,6 +405,9 @@ def _retrieve_cursor(
     connection: AsyncConnection,
 ) -> AsyncCursor:
     """Create cursor for the connection.
+
+    Use `dict_row` row_factory, because it's
+    necessary to return list of dicts result.
 
     ### Parameters:
     - `connection`: connection to the database.
